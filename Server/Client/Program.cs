@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.ServiceModel;
 using Common.Contracts;
 using Common.Faults;
 using Common.Models;
+using Client.CsvReader;
 
 namespace Client
 {
@@ -149,6 +152,52 @@ namespace Client
                 Console.WriteLine("\nPritisnite ENTER za izlaz...");
                 Console.ReadLine();
             }
+
+
+        static List<MotorSample> _samples = null;
+
+        static void UcitajCsv()
+        {
+            Console.WriteLine("\n========================================");
+            Console.WriteLine("   UCITAVANJE CSV DATASETA");
+            Console.WriteLine("========================================");
+
+            // putanja do CSV fajla - promeni prema svojoj lokaciji
+            string csvPath = @"..\..\..\..\Dataset\measures_v2.csv";
+            string logPath = @"..\..\..\..\Dataset\invalid_rows.log";
+
+            // proveri da li fajl postoji
+            if (!File.Exists(csvPath))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[GRESKA] CSV fajl nije pronadjen: {csvPath}");
+                Console.WriteLine("Postavi CSV fajl na ispravnu putanju!");
+                Console.ResetColor();
+                return;
+            }
+
+            // using blok garantuje Dispose na kraju
+            using (var csvReader = new MotorCsvReader(csvPath, logPath))
+            {
+                _samples = csvReader.ReadSamples();
+
+                Console.WriteLine($"\n[CSV] Ucitano {_samples.Count} validnih sample-ova.");
+
+                // ispisi prvih 5 kao preview
+                Console.WriteLine("\n--- Preview prvih 5 sample-ova ---");
+                int preview = Math.Min(5, _samples.Count);
+                for (int i = 0; i < preview; i++)
+                {
+                    var s = _samples[i];
+                    Console.WriteLine(
+                        $"  [{i + 1}] I_q={s.I_q:F4} | I_d={s.I_d:F4} | " +
+                        $"Coolant={s.Coolant:F4} | Torque={s.Torque:F4}"
+                    );
+                }
+            }
+            // ovde je Dispose automatski pozvan - StreamReader i Logger su zatvoreni
+        }
+
 
         static void TestValidacija()
         {
