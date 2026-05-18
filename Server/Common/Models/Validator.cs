@@ -99,6 +99,8 @@ namespace Common.Models
                 );
             }
 
+
+
             // I_d mora biti u realnom opsegu struje motora
             if (sample.I_d < -300 || sample.I_d > 300)
             {
