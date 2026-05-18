@@ -1,8 +1,4 @@
 .vs/
 */bin/
 */obj/
-Client/.vs/
-Client/Dataset/invalid_rows.log
 Client/Dataset/measures_v2.csv
-Server/bin/Debug/Files/
-Server/bin/Debug/TestFiles/
