@@ -22,6 +22,7 @@ namespace Server.FileManagement
         public string SessionFilePath => _sessionFilePath;
         public string RejectsFilePath => _rejectsFilePath;
 
+        // konstruktor sa sessionId
         public SessionFileManager(string directoryPath, string sessionId)
         {
             _directoryPath = directoryPath;
@@ -37,6 +38,13 @@ namespace Server.FileManagement
 
             // otvori FileStream i StreamWriter za session fajl
             OpenWriter();
+        }
+
+        // konstruktor koji pravi tacno measurements_session.csv
+        // kako zadatak zahteva
+        public SessionFileManager(string directoryPath)
+            : this(directoryPath, "session")
+        {
         }
 
         // otvara StreamWriter za pisanje u session fajl
