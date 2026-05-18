@@ -43,8 +43,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
-    <Compile Include="Contrats\IMotorService.cs" />
+    <Compile Include="Contracts\IMotorService.cs" />
     <Compile Include="Faults\DataFormatFault.cs" />
     <Compile Include="Faults\ValidationFault.cs" />
     <Compile Include="Models\MotorSample.cs" />

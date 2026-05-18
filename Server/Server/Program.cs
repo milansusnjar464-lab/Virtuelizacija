@@ -8,12 +8,13 @@ namespace Server
     {
         static void Main(string[] args)
         {
-            ServiceHost host = new ServiceHost(typeof(MotorService));
+            ServiceHost host = null;
 
             try
             {
+                host = new ServiceHost(typeof(MotorService));
                 host.Open();
-                Console.WriteLine("=== PMSM Motor Monitoring Server ===");
+                Console.WriteLine("=== Elektricni motor - WCF server ===");
                 Console.WriteLine("Server pokrenut na: net.tcp://localhost:4000/MotorService");
                 Console.WriteLine("Pritisnite ENTER za gasenje servera...");
                 Console.ReadLine();
@@ -21,10 +22,22 @@ namespace Server
             catch (Exception ex)
             {
                 Console.WriteLine($"Greska pri pokretanju servera: {ex.Message}");
+                host?.Abort();
             }
             finally
             {
-                host.Close();
+                if (host != null)
+                {
+                    if (host.State == CommunicationState.Faulted)
+                    {
+                        host.Abort();
+                    }
+                    else
+                    {
+                        host.Close();
+                    }
+                }
+
                 Console.WriteLine("Server ugasen.");
             }
         }

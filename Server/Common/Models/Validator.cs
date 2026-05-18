@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ServiceModel;
 using Common.Faults;
 
@@ -6,9 +6,17 @@ namespace Common.Models
 {
     public static class Validator
     {
+        public const double MinCurrent = -300.0;
+        public const double MaxCurrent = 300.0;
+        public const double MinCoolant = -10.0;
+        public const double MaxCoolant = 110.0;
+        public const double MinAmbient = -50.0;
+        public const double MaxAmbient = 100.0;
+        public const double MinTorque = -250.0;
+        public const double MaxTorque = 250.0;
+
         public static void ValidateSessionMeta(SessionMeta meta)
         {
-            // provera da li je objekat null
             if (meta == null)
             {
                 throw new FaultException<DataFormatFault>(
@@ -17,7 +25,6 @@ namespace Common.Models
                 );
             }
 
-            // provera da li SessionId postoji
             if (string.IsNullOrWhiteSpace(meta.SessionId))
             {
                 throw new FaultException<DataFormatFault>(
@@ -26,7 +33,18 @@ namespace Common.Models
                 );
             }
 
-            // SessionId ne sme biti duzi od 50 karaktera
+            if (!IsSafeFileToken(meta.SessionId))
+            {
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault(
+                        "SessionId sme da sadrzi samo slova, cifre, '-', '_' i '.'",
+                        "SessionId",
+                        "A-Z, a-z, 0-9, '-', '_' i '.'"
+                    ),
+                    new FaultReason("Neispravna vrednost polja")
+                );
+            }
+
             if (meta.SessionId.Length > 50)
             {
                 throw new FaultException<ValidationFault>(
@@ -34,11 +52,18 @@ namespace Common.Models
                     new FaultReason("Neispravna vrednost polja")
                 );
             }
+
+            if (meta.Description != null && meta.Description.Length > 200)
+            {
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault("Description je predugacak", "Description", "max 200 karaktera"),
+                    new FaultReason("Neispravna vrednost polja")
+                );
+            }
         }
 
         public static void ValidateMotorSample(MotorSample sample)
         {
-            // provera da li je objekat null
             if (sample == null)
             {
                 throw new FaultException<DataFormatFault>(
@@ -47,33 +72,12 @@ namespace Common.Models
                 );
             }
 
-            // Coolant mora biti pozitivan (temperatura rashladne tecnosti)
-            if (sample.Coolant <= 0)
-            {
-                throw new FaultException<ValidationFault>(
-                    new ValidationFault(
-                        $"Coolant vrednost {sample.Coolant} nije dozvoljena",
-                        "Coolant",
-                        "Coolant > 0"
-                    ),
-                    new FaultReason("Vrednost van dozvoljenog opsega")
-                );
-            }
+            ValidateFinite(sample.I_q, "I_q");
+            ValidateFinite(sample.I_d, "I_d");
+            ValidateFinite(sample.Coolant, "Coolant");
+            ValidateFinite(sample.Ambient, "Ambient");
+            ValidateFinite(sample.Torque, "Torque");
 
-            // Ambient temperatura mora biti realna vrednost (izmedju -50 i 100 stepeni)
-            if (sample.Ambient < -50 || sample.Ambient > 100)
-            {
-                throw new FaultException<ValidationFault>(
-                    new ValidationFault(
-                        $"Ambient vrednost {sample.Ambient} nije u dozvoljenom opsegu",
-                        "Ambient",
-                        "-50 do 100"
-                    ),
-                    new FaultReason("Vrednost van dozvoljenog opsega")
-                );
-            }
-
-            // Profile_Id mora biti pozitivan broj
             if (sample.Profile_Id <= 0)
             {
                 throw new FaultException<ValidationFault>(
@@ -86,42 +90,46 @@ namespace Common.Models
                 );
             }
 
-            // I_q mora biti u realnom opsegu struje motora
-            if (sample.I_q < -300 || sample.I_q > 300)
+            ValidateRange(sample.I_q, "I_q", MinCurrent, MaxCurrent, "A");
+            ValidateRange(sample.I_d, "I_d", MinCurrent, MaxCurrent, "A");
+            ValidateRange(sample.Coolant, "Coolant", MinCoolant, MaxCoolant, "C");
+            ValidateRange(sample.Ambient, "Ambient", MinAmbient, MaxAmbient, "C");
+            ValidateRange(sample.Torque, "Torque", MinTorque, MaxTorque, "Nm");
+        }
+
+        private static bool IsSafeFileToken(string value)
+        {
+            foreach (char c in value)
             {
-                throw new FaultException<ValidationFault>(
-                    new ValidationFault(
-                        $"I_q vrednost {sample.I_q} nije u dozvoljenom opsegu",
-                        "I_q",
-                        "-300 do 300 A"
-                    ),
-                    new FaultReason("Vrednost van dozvoljenog opsega")
-                );
+                if (!char.IsLetterOrDigit(c) && c != '-' && c != '_' && c != '.')
+                {
+                    return false;
+                }
             }
 
+            return true;
+        }
 
-
-            // I_d mora biti u realnom opsegu struje motora
-            if (sample.I_d < -300 || sample.I_d > 300)
+        private static void ValidateFinite(double value, string field)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                throw new FaultException<ValidationFault>(
-                    new ValidationFault(
-                        $"I_d vrednost {sample.I_d} nije u dozvoljenom opsegu",
-                        "I_d",
-                        "-300 do 300 A"
-                    ),
-                    new FaultReason("Vrednost van dozvoljenog opsega")
+                throw new FaultException<DataFormatFault>(
+                    new DataFormatFault($"{field} mora biti konacan broj", field),
+                    new FaultReason("Neispravan format broja")
                 );
             }
+        }
 
-            // Torque mora biti u realnom opsegu momenta motora
-            if (sample.Torque < -200 || sample.Torque > 200)
+        private static void ValidateRange(double value, string field, double min, double max, string unit)
+        {
+            if (value < min || value > max)
             {
                 throw new FaultException<ValidationFault>(
                     new ValidationFault(
-                        $"Torque vrednost {sample.Torque} nije u dozvoljenom opsegu",
-                        "Torque",
-                        "-200 do 200 Nm"
+                        $"{field} vrednost {value} nije u dozvoljenom opsegu",
+                        field,
+                        $"{min} do {max} {unit}"
                     ),
                     new FaultReason("Vrednost van dozvoljenog opsega")
                 );

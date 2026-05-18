@@ -1,4 +1,9 @@
 .vs/
 */bin/
 */obj/
-Client/Dataset/measures_v2.csv
+**/bin/
+**/obj/
+**/.vs/
+**/Dataset/measures_v2.csv
+**/Dataset/measures.csv
+**/Dataset/invalid_rows.log

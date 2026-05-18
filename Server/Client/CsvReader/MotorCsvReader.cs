@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -9,21 +9,13 @@ namespace Client.CsvReader
 {
     public class MotorCsvReader : IDisposable
     {
-        private bool _disposed = false;
-        private StreamReader _reader = null;
-        private CsvLogger _logger = null;
+        public const int MaxValidSamples = 100;
 
-        // maksimalan broj redova koji ucitavamo
-        private const int MAX_ROWS = 100;
+        private static readonly CultureInfo Culture = CultureInfo.InvariantCulture;
+        private readonly StreamReader _reader;
+        private readonly CsvLogger _logger;
+        private bool _disposed;
 
-        // putanja do CSV fajla
-        private readonly string _csvPath;
-
-        // kultura za parsiranje - tacka kao decimalni separator
-        private static readonly CultureInfo _culture = CultureInfo.InvariantCulture;
-
-        // rezultati citanja
-        public List<MotorSample> ValidSamples { get; private set; }
         public int TotalRowsRead { get; private set; }
         public int ValidRowsCount { get; private set; }
         public int InvalidRowsCount { get; private set; }
@@ -33,19 +25,10 @@ namespace Client.CsvReader
         {
             if (!File.Exists(csvPath))
             {
-                throw new FileNotFoundException(
-                    $"CSV fajl nije pronadjen na putanji: {csvPath}"
-                );
+                throw new FileNotFoundException($"CSV fajl nije pronadjen: {csvPath}", csvPath);
             }
 
-            _csvPath = csvPath;
-            ValidSamples = new List<MotorSample>(MAX_ROWS);
-
-            // otvori StreamReader sa UTF8 enkodingom
             _reader = new StreamReader(csvPath, Encoding.UTF8);
-            Console.WriteLine($"[CSV] Otvoren fajl: {csvPath}");
-
-            // otvori logger za nevalidne redove
             _logger = new CsvLogger(logPath);
         }
 
@@ -53,63 +36,40 @@ namespace Client.CsvReader
         {
             CheckDisposed();
 
-            TotalRowsRead = 0;
-            ValidRowsCount = 0;
-            InvalidRowsCount = 0;
-            ExcessRowsCount = 0;
-
-            Console.WriteLine("\n[CSV] Pocetak ucitavanja...");
-            Console.WriteLine("----------------------------------------");
-
-            // preskoci zaglavlje (prvi red)
+            var samples = new List<MotorSample>(MaxValidSamples);
             string header = _reader.ReadLine();
-            if (header == null)
+            if (string.IsNullOrWhiteSpace(header))
             {
-                Console.WriteLine("[CSV] Fajl je prazan!");
-                return ValidSamples;
+                return samples;
             }
 
-            Console.WriteLine($"[CSV] Zaglavlje: {header}");
-
-            // indeksi kolona iz zaglavlja
-            var columnIndex = ParseHeader(header);
-            if (columnIndex == null)
-            {
-                Console.WriteLine("[CSV] Zaglavlje nije ispravno!");
-                return ValidSamples;
-            }
-
+            Dictionary<string, int> columns = ParseHeader(header);
             string line;
             int rowNumber = 1;
 
-            // citaj red po red
             while ((line = _reader.ReadLine()) != null)
             {
                 rowNumber++;
                 TotalRowsRead++;
 
-                // preskoci prazne redove
                 if (string.IsNullOrWhiteSpace(line))
                 {
-                    _logger.LogInvalidRow(rowNumber, line, "Prazan red");
                     InvalidRowsCount++;
+                    _logger.LogInvalidRow(rowNumber, line, "Prazan red");
                     continue;
                 }
 
-                // ako smo ucitali 100 validnih, ostale loguj kao visak
-                if (ValidRowsCount >= MAX_ROWS)
+                if (samples.Count >= MaxValidSamples)
                 {
-                    _logger.LogExcessRow(rowNumber, line);
                     ExcessRowsCount++;
+                    _logger.LogExcessRow(rowNumber, line);
                     continue;
                 }
 
-                // pokusaj parsiranja reda
-                MotorSample sample = TryParseLine(line, rowNumber, columnIndex);
-
-                if (sample != null)
+                MotorSample sample;
+                if (TryParseLine(line, rowNumber, columns, out sample))
                 {
-                    ValidSamples.Add(sample);
+                    samples.Add(sample);
                     ValidRowsCount++;
                 }
                 else
@@ -118,145 +78,134 @@ namespace Client.CsvReader
                 }
             }
 
-            Console.WriteLine("----------------------------------------");
-            Console.WriteLine($"[CSV] Ucitavanje zavrseno!");
-            Console.WriteLine($"[CSV] Ukupno redova: {TotalRowsRead}");
-            Console.WriteLine($"[CSV] Validnih:      {ValidRowsCount}");
-            Console.WriteLine($"[CSV] Nevalidnih:    {InvalidRowsCount}");
-            Console.WriteLine($"[CSV] Visak:         {ExcessRowsCount}");
-
-            return ValidSamples;
+            return samples;
         }
 
-        // parsira zaglavlje i vraca recnik sa indeksima kolona
         private Dictionary<string, int> ParseHeader(string header)
         {
-            var columns = new Dictionary<string, int>(
-                StringComparer.OrdinalIgnoreCase
-            );
-
-            string[] parts = header.Split(',');
+            var columns = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            string[] parts = SplitCsvLine(header);
 
             for (int i = 0; i < parts.Length; i++)
             {
                 columns[parts[i].Trim()] = i;
             }
 
-            // proveri da li postoje sve obavezne kolone
-            string[] required = { "i_q", "i_d", "coolant", "profile_id", "ambient", "torque" };
-
-            foreach (string col in required)
+            string[] requiredColumns = { "i_q", "i_d", "coolant", "profile_id", "ambient", "torque" };
+            foreach (string column in requiredColumns)
             {
-                if (!columns.ContainsKey(col))
+                if (!columns.ContainsKey(column))
                 {
-                    Console.WriteLine($"[CSV] Nedostaje kolona: {col}");
-                    return null;
+                    throw new InvalidDataException($"CSV zaglavlje ne sadrzi obaveznu kolonu: {column}");
                 }
             }
 
-            Console.WriteLine("[CSV] Zaglavlje validno, sve kolone pronadjene.");
             return columns;
         }
 
-        // pokusava da parsira jedan red CSV-a
-        private MotorSample TryParseLine(
-            string line,
-            int rowNumber,
-            Dictionary<string, int> columnIndex)
+        private bool TryParseLine(string line, int rowNumber, Dictionary<string, int> columns, out MotorSample sample)
         {
+            sample = null;
+            string[] values = SplitCsvLine(line);
+
             try
             {
-                string[] parts = line.Split(',');
-
-                // proveri da li ima dovoljno kolona
-                if (parts.Length < columnIndex.Count)
+                sample = new MotorSample
                 {
-                    _logger.LogInvalidRow(
-                        rowNumber,
-                        line,
-                        $"Nedovoljan broj kolona: {parts.Length}"
-                    );
-                    return null;
-                }
-
-                // parsiranje sa InvariantCulture - tacka kao decimalni separator
-                double iq = ParseDouble(parts[columnIndex["i_q"]], "i_q", rowNumber, line);
-                double id = ParseDouble(parts[columnIndex["i_d"]], "i_d", rowNumber, line);
-                double coolant = ParseDouble(parts[columnIndex["coolant"]], "coolant", rowNumber, line);
-                double ambient = ParseDouble(parts[columnIndex["ambient"]], "ambient", rowNumber, line);
-                double torque = ParseDouble(parts[columnIndex["torque"]], "torque", rowNumber, line);
-
-                // profile_id je int
-                string profileStr = parts[columnIndex["profile_id"]].Trim();
-                if (!int.TryParse(profileStr, out int profileId))
-                {
-                    _logger.LogInvalidRow(
-                        rowNumber,
-                        line,
-                        $"Neispravan tip za profile_id: '{profileStr}'"
-                    );
-                    return null;
-                }
-
-                // proveri da li je neka vrednost NaN (greska pri parsiranju)
-                if (double.IsNaN(iq) || double.IsNaN(id) ||
-                    double.IsNaN(coolant) || double.IsNaN(ambient) ||
-                    double.IsNaN(torque))
-                {
-                    _logger.LogInvalidRow(
-                        rowNumber,
-                        line,
-                        "Jedna ili vise vrednosti nisu validni brojevi"
-                    );
-                    return null;
-                }
-
-                return new MotorSample
-                {
-                    I_q = iq,
-                    I_d = id,
-                    Coolant = coolant,
-                    Profile_Id = profileId,
-                    Ambient = ambient,
-                    Torque = torque
+                    I_q = ReadDouble(values, columns, "i_q"),
+                    I_d = ReadDouble(values, columns, "i_d"),
+                    Coolant = ReadDouble(values, columns, "coolant"),
+                    Profile_Id = ReadInt(values, columns, "profile_id"),
+                    Ambient = ReadDouble(values, columns, "ambient"),
+                    Torque = ReadDouble(values, columns, "torque")
                 };
+
+                return true;
             }
             catch (Exception ex)
             {
-                _logger.LogInvalidRow(rowNumber, line, $"Greska parsiranja: {ex.Message}");
-                return null;
+                _logger.LogInvalidRow(rowNumber, line, ex.Message);
+                return false;
             }
         }
 
-        // parsira double vrednost sa InvariantCulture
-        // vraca NaN ako parsiranje nije uspelo
-        private double ParseDouble(string value, string fieldName, int rowNumber, string rawLine)
+        private static double ReadDouble(string[] values, Dictionary<string, int> columns, string column)
         {
-            string trimmed = value.Trim();
-
-            if (double.TryParse(trimmed, NumberStyles.Any, _culture, out double result))
+            string raw = ReadRaw(values, columns, column);
+            double parsed;
+            if (!double.TryParse(raw, NumberStyles.Float, Culture, out parsed))
             {
-                return result;
+                throw new FormatException($"Kolona {column} nije validan decimalni broj: '{raw}'");
             }
 
-            _logger.LogInvalidRow(
-                rowNumber,
-                rawLine,
-                $"Neispravan format broja u koloni '{fieldName}': '{trimmed}'"
-            );
+            return parsed;
+        }
 
-            // vracamo NaN kao signal greske
-            return double.NaN;
+        private static int ReadInt(string[] values, Dictionary<string, int> columns, string column)
+        {
+            string raw = ReadRaw(values, columns, column);
+            int parsed;
+            if (!int.TryParse(raw, NumberStyles.Integer, Culture, out parsed))
+            {
+                throw new FormatException($"Kolona {column} nije validan ceo broj: '{raw}'");
+            }
+
+            return parsed;
+        }
+
+        private static string ReadRaw(string[] values, Dictionary<string, int> columns, string column)
+        {
+            int index = columns[column];
+            if (index >= values.Length)
+            {
+                throw new InvalidDataException($"Red nema vrednost za kolonu {column}");
+            }
+
+            return values[index].Trim();
+        }
+
+        private static string[] SplitCsvLine(string line)
+        {
+            var values = new List<string>();
+            var current = new StringBuilder();
+            bool inQuotes = false;
+
+            for (int i = 0; i < line.Length; i++)
+            {
+                char c = line[i];
+
+                if (c == '"')
+                {
+                    if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        current.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = !inQuotes;
+                    }
+                }
+                else if (c == ',' && !inQuotes)
+                {
+                    values.Add(current.ToString());
+                    current.Clear();
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+
+            values.Add(current.ToString());
+            return values.ToArray();
         }
 
         private void CheckDisposed()
         {
             if (_disposed)
             {
-                throw new ObjectDisposedException(
-                    nameof(MotorCsvReader),
-                    "MotorCsvReader je vec dispose-ovan!"
-                );
+                throw new ObjectDisposedException(nameof(MotorCsvReader));
             }
         }
 
@@ -273,26 +222,18 @@ namespace Client.CsvReader
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (_disposed)
             {
-                if (disposing)
-                {
-                    if (_reader != null)
-                    {
-                        _reader.Close();
-                        _reader.Dispose();
-                        _reader = null;
-                        Console.WriteLine("[CSV] StreamReader zatvoren.");
-                    }
-
-                    if (_logger != null)
-                    {
-                        _logger.Dispose();
-                        _logger = null;
-                    }
-                }
-                _disposed = true;
+                return;
             }
+
+            if (disposing)
+            {
+                _reader.Dispose();
+                _logger.Dispose();
+            }
+
+            _disposed = true;
         }
     }
 }
