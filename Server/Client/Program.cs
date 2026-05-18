@@ -162,28 +162,25 @@ namespace Client
             Console.WriteLine("   UCITAVANJE CSV DATASETA");
             Console.WriteLine("========================================");
 
-            // putanja do CSV fajla - promeni prema svojoj lokaciji
-            string csvPath = @"..\..\..\..\Dataset\measures_v2.csv";
-            string logPath = @"..\..\..\..\Dataset\invalid_rows.log";
+            // putanja relativna od bin/Debug foldera
+            string csvPath = @"Dataset\measures_v2.csv";
+            string logPath = @"Dataset\invalid_rows.log";
 
-            // proveri da li fajl postoji
             if (!File.Exists(csvPath))
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"[GRESKA] CSV fajl nije pronadjen: {csvPath}");
-                Console.WriteLine("Postavi CSV fajl na ispravnu putanju!");
+                Console.WriteLine($"Apsolutna putanja: {Path.GetFullPath(csvPath)}");
                 Console.ResetColor();
                 return;
             }
 
-            // using blok garantuje Dispose na kraju
             using (var csvReader = new MotorCsvReader(csvPath, logPath))
             {
                 _samples = csvReader.ReadSamples();
 
                 Console.WriteLine($"\n[CSV] Ucitano {_samples.Count} validnih sample-ova.");
 
-                // ispisi prvih 5 kao preview
                 Console.WriteLine("\n--- Preview prvih 5 sample-ova ---");
                 int preview = Math.Min(5, _samples.Count);
                 for (int i = 0; i < preview; i++)
@@ -195,7 +192,6 @@ namespace Client
                     );
                 }
             }
-            // ovde je Dispose automatski pozvan - StreamReader i Logger su zatvoreni
         }
 
 

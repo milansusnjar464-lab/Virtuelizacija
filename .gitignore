@@ -1,9 +1,7 @@
 .vs/
-*.user
-*.suo
-bin/
-obj/
-packages/
-*.nupkg
-Thumbs.db
-.DS_Store
+*/bin/
+*/obj/
+Client/.vs/
+Client/Dataset/invalid_rows.log
+Server/bin/Debug/Files/
+Server/bin/Debug/TestFiles/

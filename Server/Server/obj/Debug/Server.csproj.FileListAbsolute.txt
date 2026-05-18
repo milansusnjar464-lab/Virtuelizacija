@@ -1,0 +1,10 @@
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\bin\Debug\Server.exe.config
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\bin\Debug\Server.exe
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\bin\Debug\Server.pdb
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\bin\Debug\Common.dll
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\bin\Debug\Common.pdb
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\obj\Debug\Server.csproj.AssemblyReference.cache
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\obj\Debug\Server.csproj.CoreCompileInputs.cache
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\obj\Debug\Server.csproj.Up2Date
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\obj\Debug\Server.exe
+C:\Users\KORISNIK\Desktop\Virtuelizacija\Server\Server\obj\Debug\Server.pdb
